@@ -256,7 +256,7 @@ impl VirtualMachine {
         let byte_slice = unsafe {
             std::slice::from_raw_parts_mut(mem_slice.as_mut_ptr() as *mut u8, mem_slice.len() * 2)
         };
-        file.read_exact(byte_slice)?;
+        file.read(byte_slice)?;
 
         Ok(())
     }
