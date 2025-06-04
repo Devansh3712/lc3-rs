@@ -1,11 +1,11 @@
 use std::env;
 use std::fs::File;
 use std::io::{self, Read, Write};
+use std::ops::{Index, IndexMut};
 
 mod utils;
 use utils::*;
 
-// TODO: Implement usize trait
 #[allow(dead_code)]
 enum Register {
     R0 = 0,
@@ -19,6 +19,20 @@ enum Register {
     RPC,
     RCND,
     RCNT,
+}
+
+impl Index<Register> for [u16] {
+    type Output = u16;
+
+    fn index(&self, register: Register) -> &Self::Output {
+        &self[register as usize]
+    }
+}
+
+impl IndexMut<Register> for [u16] {
+    fn index_mut(&mut self, register: Register) -> &mut Self::Output {
+        &mut self[register as usize]
+    }
 }
 
 enum Flag {
@@ -95,7 +109,7 @@ impl VirtualMachine {
             v if (v >> 15) == 1 => Flag::FN,
             _ => Flag::FP,
         };
-        self.registers[Register::RCND as usize] = flag as u16;
+        self.registers[Register::RCND] = flag as u16;
     }
 
     fn add(&mut self, i: u16) {
@@ -122,14 +136,13 @@ impl VirtualMachine {
     }
 
     fn ld(&mut self, i: u16) {
-        self.registers[dr(i) as usize] =
-            self.memread(self.registers[Register::RPC as usize] + poff9(i));
+        self.registers[dr(i) as usize] = self.memread(self.registers[Register::RPC] + poff9(i));
         self.uf(dr(i));
     }
 
     fn ldi(&mut self, i: u16) {
         self.registers[dr(i) as usize] =
-            self.memread(self.memread(self.registers[Register::RPC as usize] + poff9(i)));
+            self.memread(self.memread(self.registers[Register::RPC] + poff9(i)));
         self.uf(dr(i));
     }
 
@@ -139,20 +152,20 @@ impl VirtualMachine {
     }
 
     fn lea(&mut self, i: u16) {
-        self.registers[dr(i) as usize] = self.registers[Register::RPC as usize] + poff9(i);
+        self.registers[dr(i) as usize] = self.registers[Register::RPC] + poff9(i);
         self.uf(dr(i));
     }
 
     fn st(&mut self, i: u16) {
         self.memwrite(
-            self.registers[Register::RPC as usize] + poff9(i),
+            self.registers[Register::RPC] + poff9(i),
             self.registers[dr(i) as usize],
         );
     }
 
     fn sti(&mut self, i: u16) {
         self.memwrite(
-            self.memread(self.registers[Register::RPC as usize] + poff9(i)),
+            self.memread(self.registers[Register::RPC] + poff9(i)),
             self.registers[dr(i) as usize],
         );
     }
@@ -165,42 +178,42 @@ impl VirtualMachine {
     }
 
     fn jmp(&mut self, i: u16) {
-        self.registers[Register::RPC as usize] = self.registers[sr1(i) as usize];
+        self.registers[Register::RPC] = self.registers[sr1(i) as usize];
     }
 
     fn jsr(&mut self, i: u16) {
-        self.registers[Register::R7 as usize] = self.registers[Register::RPC as usize];
+        self.registers[Register::R7] = self.registers[Register::RPC];
         let val = match fl(i) {
-            1 => self.registers[Register::RPC as usize] + poff11(i),
+            1 => self.registers[Register::RPC] + poff11(i),
             _ => self.registers[sr1(i) as usize],
         };
-        self.registers[Register::RPC as usize] = val;
+        self.registers[Register::RPC] = val;
     }
 
     fn rti(&mut self, _i: u16) {}
     fn res(&mut self, _i: u16) {}
 
     fn br(&mut self, i: u16) {
-        if self.registers[Register::RCND as usize] & fcnd(i) == 1 {
-            self.registers[Register::RPC as usize] += poff9(i);
+        if self.registers[Register::RCND] & fcnd(i) == 1 {
+            self.registers[Register::RPC] += poff9(i);
         }
     }
 
     fn tgetc(&mut self) {
         let mut buffer = [0; 1];
         if io::stdin().read_exact(&mut buffer).is_ok() {
-            self.registers[Register::R0 as usize] = buffer[0] as u16;
+            self.registers[Register::R0] = buffer[0] as u16;
         }
     }
 
     fn tout(&mut self) {
-        let val = self.registers[Register::R0 as usize] as u8 as char;
+        let val = self.registers[Register::R0] as u8 as char;
         print!("{}", val);
         io::stdout().flush().unwrap();
     }
 
     fn tputs(&mut self) {
-        let mut address = self.registers[Register::R0 as usize];
+        let mut address = self.registers[Register::R0];
         while self.memory[address as usize] != 0 {
             let val = self.memory[address as usize] as u8 as char;
             print!("{}", val);
@@ -212,7 +225,7 @@ impl VirtualMachine {
     fn tin(&mut self) {
         let mut buffer = [0; 1];
         if io::stdin().read_exact(&mut buffer).is_ok() {
-            self.registers[Register::R0 as usize] = buffer[0] as u16;
+            self.registers[Register::R0] = buffer[0] as u16;
             print!("{}", buffer[0] as u8 as char);
             io::stdout().flush().unwrap();
         }
@@ -226,13 +239,13 @@ impl VirtualMachine {
         let mut input = String::new();
         if io::stdin().read_line(&mut input).is_ok() {
             if let Ok(val) = input.trim().parse::<u16>() {
-                self.registers[Register::R0 as usize] = val;
+                self.registers[Register::R0] = val;
             }
         }
     }
 
     fn toutu16(&mut self) {
-        println!("{}", self.registers[Register::R0 as usize]);
+        println!("{}", self.registers[Register::R0]);
         io::stdout().flush().unwrap();
     }
 
@@ -264,9 +277,8 @@ impl VirtualMachine {
     fn start(&mut self, offset: u16) {
         self.registers[Register::RPC as usize] = self.pc.wrapping_add(offset);
         while self.running {
-            let i: u16 = self.memread(self.registers[Register::RPC as usize]);
-            self.registers[Register::RPC as usize] =
-                self.registers[Register::RPC as usize].wrapping_add(1);
+            let i: u16 = self.memread(self.registers[Register::RPC]);
+            self.registers[Register::RPC] = self.registers[Register::RPC].wrapping_add(1);
             self.op_ex[opc(i) as usize](self, i);
         }
     }
