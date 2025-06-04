@@ -46,7 +46,6 @@ const TRAP_OFFSET: u16 = 0x20;
 const MEMORY_SIZE: usize = u16::MAX as usize + 1;
 const REGISTER_COUNT: usize = Register::RCNT as usize;
 
-// TODO: Implement Default trait
 struct VirtualMachine {
     pc: u16,
     running: bool,
@@ -261,7 +260,7 @@ impl VirtualMachine {
         let max_words = MEMORY_SIZE - start;
         let mem_slice = &mut self.memory[start..start + max_words];
 
-        // read_exact requires &mut [u8] buffer as input and the VM memory
+        // read requires &mut [u8] buffer as input and the VM memory
         // is [u16], so we create a new slice from a raw pointer to the first byte
         // of mem_slice casted as *mut u8
         // since each u16 is 2 bytes, &mut [u16] is treated as &mut [u8] that is
@@ -275,7 +274,7 @@ impl VirtualMachine {
     }
 
     fn start(&mut self, offset: u16) {
-        self.registers[Register::RPC as usize] = self.pc.wrapping_add(offset);
+        self.registers[Register::RPC] = self.pc.wrapping_add(offset);
         while self.running {
             let i: u16 = self.memread(self.registers[Register::RPC]);
             self.registers[Register::RPC] = self.registers[Register::RPC].wrapping_add(1);
